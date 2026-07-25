@@ -1,6 +1,6 @@
 # Customer Churn Prediction
 
-An end-to-end machine learning project analyzing and predicting customer churn using the Telco Customer Churn dataset — from exploratory analysis through model optimization.
+An end-to-end machine learning project analyzing and predicting customer churn using the Telco Customer Churn dataset — from exploratory analysis through model optimization and live deployment.
 
 ## Dataset
 - Source: Telco Customer Churn Dataset
@@ -11,6 +11,8 @@ An end-to-end machine learning project analyzing and predicting customer churn u
 - `week1_eda.ipynb` - Exploratory data analysis notebook
 - `week2_ml_models.ipynb` - Machine learning models: training, evaluation, and feature engineering
 - `week3_optimization.ipynb` - Cross-validation, hyperparameter tuning, and XGBoost optimization
+- `app.py` - Streamlit web app for real-time churn prediction
+- `requirements.txt` - Python dependencies for the Streamlit app
 - `customer_data.csv` - Dataset (not included, download separately — see Setup)
 - `best_churn_model.pkl` - Final tuned model, saved for deployment
 - `model_metadata.json` - Metadata (params, metrics, feature list) for the saved model
@@ -86,18 +88,42 @@ Cross-validation, GridSearchCV hyperparameter tuning, and XGBoost were used to s
 - Saved as `best_churn_model.pkl` with parameters and metrics logged in `model_metadata.json`
 - Note: this fell short of an 85% stretch target common for this dataset; see the notebook's summary section for suggested next steps to close that gap
 
+## Week 4: Interactive Deployment (Streamlit)
+
+A live, interactive web app that loads the tuned XGBoost model from Week 3 and predicts churn risk for any customer profile in real time.
+
+### Live App
+🔗 [Add your Streamlit Cloud URL here after deployment]
+
+### Run locally
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+The app will open automatically in your browser at `http://localhost:8501`.
+
+### How to use it
+1. Fill in the customer's demographics, services, and account details using the form.
+2. Click **Predict Churn**.
+3. The app shows:
+   - A high-risk / low-risk verdict with the churn probability
+   - A gauge chart visualizing the risk level
+   - Specific retention recommendations based on the customer's profile (contract type, payment method, tenure, internet service)
+
 ## Next Steps
-- Week 4: Deploy an interactive prediction dashboard (Streamlit)
-- Build a user input form for real-time churn prediction
-- Add prediction-confidence visualization and feature-level explanations
 - Explore class-imbalance handling (e.g., SMOTE, class weighting) and engineered interaction features to push accuracy higher
+- Add a 1-2 minute demo video showing the app in action
+- Consider Project 2: Document Intelligence System
 
 ## Setup
 ```bash
-pip install pandas numpy matplotlib seaborn jupyter scikit-learn xgboost
+pip install pandas numpy matplotlib seaborn jupyter scikit-learn xgboost streamlit plotly
 jupyter notebook week1_eda.ipynb
 jupyter notebook week2_ml_models.ipynb
 jupyter notebook week3_optimization.ipynb
+streamlit run app.py
 ```
 
 Download the dataset from [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) and save it as `customer_data.csv` in the project folder before running any notebook.
