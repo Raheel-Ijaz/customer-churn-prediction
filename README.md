@@ -93,7 +93,7 @@ Cross-validation, GridSearchCV hyperparameter tuning, and XGBoost were used to s
 A live, interactive web app that loads the tuned XGBoost model from Week 3 and predicts churn risk for any customer profile in real time.
 
 ### Live App
-🔗 [Add your Streamlit Cloud URL here after deployment]
+🔗 https://customer-churn-prediction-raheel-ijaz.streamlit.app/
 
 ### Run locally
 
