@@ -1,6 +1,6 @@
 # Customer Churn Prediction
 
-A machine learning project analyzing and predicting customer churn using the Telco Customer Churn dataset.
+An end-to-end machine learning project analyzing and predicting customer churn using the Telco Customer Churn dataset — from exploratory analysis through model optimization.
 
 ## Dataset
 - Source: Telco Customer Churn Dataset
@@ -10,7 +10,10 @@ A machine learning project analyzing and predicting customer churn using the Tel
 ## Files
 - `week1_eda.ipynb` - Exploratory data analysis notebook
 - `week2_ml_models.ipynb` - Machine learning models: training, evaluation, and feature engineering
+- `week3_optimization.ipynb` - Cross-validation, hyperparameter tuning, and XGBoost optimization
 - `customer_data.csv` - Dataset (not included, download separately — see Setup)
+- `best_churn_model.pkl` - Final tuned model, saved for deployment
+- `model_metadata.json` - Metadata (params, metrics, feature list) for the saved model
 
 ## Week 1: Exploratory Data Analysis
 
@@ -44,17 +47,57 @@ Three classification models trained and compared, plus feature engineering exper
 ### Feature Engineering
 Four engineered features were tested (TotalRevenue, TotalServices, TenureGroup, HighCharges). Accuracy slightly decreased (80.70% → 78.92%), suggesting the new features were largely redundant with existing ones rather than adding new predictive signal — a useful negative result that informs future feature selection.
 
+## Week 3: Model Optimization
+
+Cross-validation, GridSearchCV hyperparameter tuning, and XGBoost were used to systematically optimize the Week 2 models.
+
+### Cross-Validation (5-Fold)
+- Mean accuracy: **78.59%** (± 1.23%)
+- Confirms the single train/test split wasn't overly optimistic — CV mean closely matches the baseline test accuracy
+
+### Hyperparameter Tuning Results
+
+| Model | Accuracy | Precision | Recall | F1-Score |
+|---|---|---|---|---|
+| Baseline Random Forest | 78.78% | 62.54% | 50.00% | 55.57% |
+| Optimized Random Forest | 80.13% | 66.55% | 50.53% | 57.45% |
+| Basic XGBoost | 79.77% | 63.95% | 54.55% | 58.87% |
+| **Optimized XGBoost (best)** | **80.27%** | 66.22% | 52.41% | 58.51% |
+
+**Best Random Forest parameters:** `max_depth=10, max_features='log2', min_samples_leaf=4, min_samples_split=2, n_estimators=300`
+
+**Best XGBoost parameters:** `colsample_bytree=0.8, learning_rate=0.1, max_depth=3, n_estimators=100, subsample=0.8`
+
+### Top Predictive Features (Optimized XGBoost)
+1. Internet Service (Fiber optic)
+2. Contract (Two year)
+3. Online Security (No internet service)
+4. Payment Method (Electronic check)
+5. Contract (One year)
+
+### Key Learnings
+- Hyperparameter tuning improved Random Forest by 1.35 points and gave XGBoost a slight edge over RF overall
+- The model's false-negative rate (47.6%) is notably high — it misses roughly half of actual churners, which matters more than raw accuracy for a retention use case
+- Contract type and internet service type are stronger churn drivers than billing amount or usage volume
+- Further gains would likely come from feature engineering (contract × internet-service interactions) or addressing class imbalance, rather than more tuning
+
+### Final Model
+- **Optimized XGBoost**, 80.27% test accuracy
+- Saved as `best_churn_model.pkl` with parameters and metrics logged in `model_metadata.json`
+- Note: this fell short of an 85% stretch target common for this dataset; see the notebook's summary section for suggested next steps to close that gap
+
 ## Next Steps
-- Week 3: Hyperparameter tuning and cross-validation
-- Explore additional feature combinations
-- Handle class imbalance if needed
-- Week 4: Deploy an interactive prediction dashboard
+- Week 4: Deploy an interactive prediction dashboard (Streamlit)
+- Build a user input form for real-time churn prediction
+- Add prediction-confidence visualization and feature-level explanations
+- Explore class-imbalance handling (e.g., SMOTE, class weighting) and engineered interaction features to push accuracy higher
 
 ## Setup
 ```bash
-pip install pandas numpy matplotlib seaborn jupyter scikit-learn
+pip install pandas numpy matplotlib seaborn jupyter scikit-learn xgboost
 jupyter notebook week1_eda.ipynb
 jupyter notebook week2_ml_models.ipynb
+jupyter notebook week3_optimization.ipynb
 ```
 
-Download the dataset from [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) and save it as `customer_data.csv` in the project folder before running either notebook.
+Download the dataset from [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) and save it as `customer_data.csv` in the project folder before running any notebook.
