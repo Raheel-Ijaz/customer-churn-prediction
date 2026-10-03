@@ -10,12 +10,14 @@ An end-to-end machine learning project analyzing and predicting customer churn u
 ## Files
 - `week1_eda.ipynb` - Exploratory data analysis notebook
 - `week2_ml_models.ipynb` - Machine learning models: training, evaluation, and feature engineering
-- `week3_optimization.ipynb` - Cross-validation, hyperparameter tuning, and XGBoost optimization
+- `week3_optimization.ipynb` - Cross-validation, tuning (LR/RF/XGBoost), K-means segmentation, PCA, final pipeline
 - `app.py` - Streamlit web app for real-time churn prediction
 - `requirements.txt` - Python dependencies for the Streamlit app
 - `customer_data.csv` - Dataset (not included, download separately — see Setup)
 - `best_churn_model.pkl` - Final tuned model, saved for deployment
 - `model_metadata.json` - Metadata (params, metrics, feature list) for the saved model
+- `churn_model.joblib` - Week 3 final pipeline (XGBoost, chosen by CV, tested once)
+- `churn_model_metadata.json` - CV/test metrics and feature list for the Week 3 pipeline
 
 ## Week 1: Exploratory Data Analysis
 
@@ -49,44 +51,25 @@ Three classification models trained and compared, plus feature engineering exper
 ### Feature Engineering
 Four engineered features were tested (TotalRevenue, TotalServices, TenureGroup, HighCharges). Accuracy slightly decreased (80.70% → 78.92%), suggesting the new features were largely redundant with existing ones rather than adding new predictive signal — a useful negative result that informs future feature selection.
 
-## Week 3: Model Optimization
+## Week 3: Model Optimization and Unsupervised Learning
 
-Cross-validation, GridSearchCV hyperparameter tuning, and XGBoost were used to systematically optimize the Week 2 models.
+Honest, cross-validated evaluation, tuning of three model families, customer segmentation, and PCA. The test set is created once and untouched until the final step.
 
-### Cross-Validation (5-Fold)
-- Mean accuracy: **78.59%** (± 1.23%)
-- Confirms the single train/test split wasn't overly optimistic — CV mean closely matches the baseline test accuracy
+- **Split noise:** the same Logistic Regression scored between **78.0% and 82.8%** accuracy across 20 random splits (std 1.04 pts, theoretical SE 1.07 pts), so a single split cannot rank close models.
+- **5-fold CV (mean ± std):**
 
-### Hyperparameter Tuning Results
+| Model | AUC | Recall |
+|---|---|---|
+| Logistic Regression | 0.846 ± 0.013 | 0.545 ± 0.042 |
+| Random Forest | 0.844 ± 0.011 | 0.496 ± 0.019 |
+| **XGBoost (tuned)** | **0.850 ± 0.012** | 0.536 ± 0.032 |
 
-| Model | Accuracy | Precision | Recall | F1-Score |
-|---|---|---|---|---|
-| Baseline Random Forest | 78.78% | 62.54% | 50.00% | 55.57% |
-| Optimized Random Forest | 80.13% | 66.55% | 50.53% | 57.45% |
-| Basic XGBoost | 79.77% | 63.95% | 54.55% | 58.87% |
-| **Optimized XGBoost (best)** | **80.27%** | 66.22% | 52.41% | 58.51% |
-
-**Best Random Forest parameters:** `max_depth=10, max_features='log2', min_samples_leaf=4, min_samples_split=2, n_estimators=300`
-
-**Best XGBoost parameters:** `colsample_bytree=0.8, learning_rate=0.1, max_depth=3, n_estimators=100, subsample=0.8`
-
-### Top Predictive Features (Optimized XGBoost)
-1. Internet Service (Fiber optic)
-2. Contract (Two year)
-3. Online Security (No internet service)
-4. Payment Method (Electronic check)
-5. Contract (One year)
-
-### Key Learnings
-- Hyperparameter tuning improved Random Forest by 1.35 points and gave XGBoost a slight edge over RF overall
-- The model's false-negative rate (47.6%) is notably high — it misses roughly half of actual churners, which matters more than raw accuracy for a retention use case
-- Contract type and internet service type are stronger churn drivers than billing amount or usage volume
-- Further gains would likely come from feature engineering (contract × internet-service interactions) or addressing class imbalance, rather than more tuning
-
-### Final Model
-- **Optimized XGBoost**, 80.27% test accuracy
-- Saved as `best_churn_model.pkl` with parameters and metrics logged in `model_metadata.json`
-- Note: this fell short of an 85% stretch target common for this dataset; see the notebook's summary section for suggested next steps to close that gap
+- **Tuning:** validation curve for `C` (plateau from C ≈ 0.3), grid vs random search for Random Forest (both 120 fits, 130 s vs 145 s, same score within noise), XGBoost early stopping (247 trees) and random search (30 candidates).
+- **Final model (chosen by CV, tested once):** tuned XGBoost, **test AUC 0.848**, recall 0.521, precision 0.659, accuracy 80.13%, inside CV mean ± 2 std.
+- **Customer segments (K-means, k = 4):** Mid-tenure high spend (**43%** churn), New low-spend starters (32%), Loyal power users (14%), Loyal budget (5%), each with a retention action in the notebook.
+- **PCA:** 15 of 30 components explain 90% of the variance; PC1 exposed duplicate "No internet service" dummy columns.
+- **Key learnings:** tuning barely moved the score (0.846 → 0.850 AUC, inside one std). Class weighting (`scale_pos_weight`) raised recall from 0.54 to 0.81 at the cost of precision, which matters more for a retention use case than 0.4 points of accuracy.
+- Saved as `churn_model.joblib` (full pipeline) with `churn_model_metadata.json`. The live app (Week 4) still uses `best_churn_model.pkl`.
 
 ## Week 4: Interactive Deployment (Streamlit)
 
