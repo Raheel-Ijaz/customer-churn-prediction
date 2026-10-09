@@ -1,184 +1,151 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import pickle
 import json
-import plotly.graph_objects as go
+import joblib
+import numpy as np
+import pandas as pd
+import streamlit as st
 
-# Page configuration
-st.set_page_config(
-    page_title='Customer Churn Predictor',
-    page_icon='📊',
-    layout='wide'
-)
+st.set_page_config(page_title='Churn Risk Advisor', layout='wide')
 
-st.title('📊 Customer Churn Prediction System')
-st.markdown('Enter a customer\'s details below to estimate their risk of churning.')
-
-
-@st.cache_resource
-def load_model():
-    with open('best_churn_model.pkl', 'rb') as file:
-        return pickle.load(file)
-
-
-@st.cache_resource
-def load_metadata():
-    with open('model_metadata.json', 'r') as file:
-        return json.load(file)
+RAW_COLS = ['gender', 'SeniorCitizen', 'Partner', 'Dependents', 'tenure',
+            'PhoneService', 'MultipleLines', 'InternetService',
+            'OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+            'TechSupport', 'StreamingTV', 'StreamingMovies', 'Contract',
+            'PaperlessBilling', 'PaymentMethod', 'MonthlyCharges',
+            'TotalCharges']
+SERVICES = ['OnlineSecurity', 'OnlineBackup', 'DeviceProtection',
+            'TechSupport', 'StreamingTV', 'StreamingMovies']
+PAYMENTS = ['Electronic check', 'Mailed check',
+            'Bank transfer (automatic)', 'Credit card (automatic)']
 
 
-model = load_model()
-metadata = load_metadata()
-feature_columns = metadata['features']
+@st.cache_resource            # load once per server, not on every click
+def load_artifacts():
+    model = joblib.load('churn_model.joblib')
+    with open('model_meta.json') as f:
+        meta = json.load(f)
+    return model, meta
 
-st.success('Model loaded successfully!')
 
-with st.expander('Model info'):
-    st.write(f"Model type: {metadata.get('model_type', 'N/A')}")
-    st.write(f"Test accuracy: {metadata.get('accuracy', 0) * 100:.2f}%")
-    st.write(f"Precision: {metadata.get('precision', 0) * 100:.2f}%")
-    st.write(f"Recall: {metadata.get('recall', 0) * 100:.2f}%")
-    st.write(f"F1-score: {metadata.get('f1_score', 0) * 100:.2f}%")
+def prepare_input(raw, columns):
+    X = pd.get_dummies(raw[RAW_COLS])            # no drop_first at serving
+    return X.reindex(columns=columns, fill_value=0).astype(float)
 
-st.divider()
 
-col1, col2, col3 = st.columns(3)
+model, meta = load_artifacts()
+COLS = meta['feature_columns']
 
-with col1:
-    st.subheader('Demographics')
-    gender = st.selectbox('Gender', ['Male', 'Female'])
-    senior_citizen = st.selectbox('Senior Citizen', ['No', 'Yes'])
-    partner = st.selectbox('Partner', ['No', 'Yes'])
-    dependents = st.selectbox('Dependents', ['No', 'Yes'])
 
-with col2:
-    st.subheader('Services')
-    phone_service = st.selectbox('Phone Service', ['No', 'Yes'])
-    multiple_lines = st.selectbox('Multiple Lines', ['No', 'Yes', 'No phone service'])
-    internet_service = st.selectbox('Internet Service', ['DSL', 'Fiber optic', 'No'])
-    online_security = st.selectbox('Online Security', ['No', 'Yes', 'No internet service'])
-    online_backup = st.selectbox('Online Backup', ['No', 'Yes', 'No internet service'])
-    device_protection = st.selectbox('Device Protection', ['No', 'Yes', 'No internet service'])
-    tech_support = st.selectbox('Tech Support', ['No', 'Yes', 'No internet service'])
-    streaming_tv = st.selectbox('Streaming TV', ['No', 'Yes', 'No internet service'])
-    streaming_movies = st.selectbox('Streaming Movies', ['No', 'Yes', 'No internet service'])
+def score(raw):
+    return model.predict_proba(prepare_input(raw, COLS))[:, 1]
 
-with col3:
-    st.subheader('Account')
-    contract = st.selectbox('Contract', ['Month-to-month', 'One year', 'Two year'])
-    paperless_billing = st.selectbox('Paperless Billing', ['No', 'Yes'])
-    payment_method = st.selectbox(
-        'Payment Method',
-        ['Electronic check', 'Mailed check', 'Bank transfer (automatic)', 'Credit card (automatic)']
-    )
-    tenure = st.slider('Tenure (months)', 0, 72, 12)
-    monthly_charges = st.number_input('Monthly Charges ($)', min_value=0.0, max_value=200.0, value=70.0)
-    total_charges = st.number_input(
-        'Total Charges ($)', min_value=0.0, max_value=10000.0,
-        value=round(tenure * monthly_charges, 2)
-    )
 
-st.divider()
+# ---------------- Sidebar: one customer ----------------
+with st.sidebar:
+    st.header('Customer profile')
+    tenure = st.slider('Tenure (months)', 0, 72, 4)
+    contract = st.selectbox('Contract',
+                            ['Month-to-month', 'One year', 'Two year'])
+    monthly = st.number_input('Monthly charges (USD)', 18.0, 120.0, 85.0,
+                              step=0.5)
+    internet = st.selectbox('Internet service', ['Fiber optic', 'DSL', 'No'])
+    services = []
+    if internet != 'No':
+        services = st.multiselect('Add-on services', SERVICES,
+                                  default=['StreamingTV'])
+    phone = st.radio('Phone service', ['Yes', 'No'], horizontal=True)
+    multi = 'No phone service'
+    if phone == 'Yes':
+        multi = st.radio('Multiple lines', ['No', 'Yes'], horizontal=True)
+    payment = st.selectbox('Payment method', PAYMENTS)
+    paperless = st.radio('Paperless billing', ['Yes', 'No'], horizontal=True)
+    with st.expander('Demographics'):
+        gender = st.radio('Gender', ['Female', 'Male'], horizontal=True)
+        senior = st.checkbox('Senior citizen')
+        partner = st.checkbox('Has partner')
+        dependents = st.checkbox('Has dependents')
+    st.divider()
+    threshold = st.slider('Contact threshold', 0.05, 0.95,
+                          float(meta['threshold']), 0.05)
 
-if st.button('🔮 Predict Churn', type='primary'):
+row = {'gender': gender, 'SeniorCitizen': int(senior),
+       'Partner': 'Yes' if partner else 'No',
+       'Dependents': 'Yes' if dependents else 'No', 'tenure': tenure,
+       'PhoneService': phone, 'MultipleLines': multi,
+       'InternetService': internet, 'Contract': contract,
+       'PaperlessBilling': paperless, 'PaymentMethod': payment,
+       'MonthlyCharges': monthly,
+       'TotalCharges': tenure * monthly}           # derived, not typed
+for s in SERVICES:
+    row[s] = ('No internet service' if internet == 'No'
+              else 'Yes' if s in services else 'No')
+customer = pd.DataFrame([row])
 
-    # Build a single-row dataframe matching the RAW column names from training
-    input_data = {
-        'gender': gender,
-        'SeniorCitizen': 1 if senior_citizen == 'Yes' else 0,
-        'Partner': partner,
-        'Dependents': dependents,
-        'tenure': tenure,
-        'PhoneService': phone_service,
-        'MultipleLines': multiple_lines,
-        'InternetService': internet_service,
-        'OnlineSecurity': online_security,
-        'OnlineBackup': online_backup,
-        'DeviceProtection': device_protection,
-        'TechSupport': tech_support,
-        'StreamingTV': streaming_tv,
-        'StreamingMovies': streaming_movies,
-        'Contract': contract,
-        'PaperlessBilling': paperless_billing,
-        'PaymentMethod': payment_method,
-        'MonthlyCharges': monthly_charges,
-        'TotalCharges': total_charges
-    }
-    input_df = pd.DataFrame([input_data])
+# ---------------- Main area ----------------
+st.title('Customer Churn Risk Advisor')
+st.caption(f"{meta['model_name']}  |  CV AUC {meta['cv_auc']:.3f} "
+           f"+/- {meta['cv_auc_std']:.3f}  |  Decision support only")
 
-    # Encode exactly like Week 2/3 training preprocessing
-    categorical_cols = ['gender', 'Partner', 'Dependents', 'PhoneService',
-                         'MultipleLines', 'InternetService', 'OnlineSecurity',
-                         'OnlineBackup', 'DeviceProtection', 'TechSupport',
-                         'StreamingTV', 'StreamingMovies', 'Contract',
-                         'PaperlessBilling', 'PaymentMethod']
+tab1, tab2, tab3 = st.tabs(['One customer', 'Batch scoring', 'About'])
 
-    input_encoded = pd.get_dummies(input_df, columns=categorical_cols, drop_first=True)
+with tab1:
+    p = float(score(customer)[0])
+    band = ('HIGH' if p >= threshold else
+            'WATCH' if p >= threshold / 2 else 'LOW')
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Churn probability', f'{p:.0%}')
+    c2.metric('Risk band', band)
+    c3.metric('Action', 'Contact now' if band == 'HIGH' else 'No action')
+    st.progress(p)
 
-    # Align columns EXACTLY to what the model was trained on.
-    # Any dummy column not present in this single row is filled with 0.
-    # Any column the model doesn't expect is dropped.
-    input_final = input_encoded.reindex(columns=feature_columns, fill_value=0)
+    st.subheader('What would change the risk?')
+    changes = [('Contract', c) for c in ['One year', 'Two year']
+               if c != contract]
+    if payment == 'Electronic check':
+        changes.append(('PaymentMethod', 'Credit card (automatic)'))
+    if internet != 'No' and 'TechSupport' not in services:
+        changes.append(('TechSupport', 'Yes'))
+    rows = []
+    for feature, value in changes:
+        alt = customer.copy()
+        alt[feature] = value
+        q = float(score(alt)[0])
+        rows.append({'Change': f'{feature}: {value}',
+                     'New probability': round(q, 3),
+                     'Difference': round(q - p, 3)})
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
+    st.caption('Associations learned from data, not guaranteed effects.')
 
-    prediction = model.predict(input_final)[0]
-    probability = model.predict_proba(input_final)[0]
-    churn_prob = probability[1] * 100
+    final = model[-1] if hasattr(model, 'steps') else model
+    if hasattr(model, 'steps') and hasattr(final, 'coef_'):
+        with st.expander('Why this score? (Logistic Regression)'):
+            z = model[:-1].transform(prepare_input(customer, COLS))[0]
+            contrib = pd.Series(final.coef_[0] * z, index=COLS)
+            top = contrib.reindex(
+                contrib.abs().sort_values(ascending=False).index).head(8)
+            st.bar_chart(top)
+            st.caption('Positive bars push toward churn, negative away.')
 
-    result_col, gauge_col = st.columns(2)
+with tab2:
+    st.write('Upload a CSV with the original Telco columns.')
+    file = st.file_uploader('Customer file', type='csv')
+    if file is not None:
+        data = pd.read_csv(file)
+        missing = [c for c in RAW_COLS if c not in data.columns]
+        if missing:
+            st.error(f'Missing columns: {missing}')
+            st.stop()
+        data['TotalCharges'] = pd.to_numeric(
+            data['TotalCharges'], errors='coerce').fillna(0)
+        data['p_churn'] = score(data).round(3)
+        data['contact'] = np.where(data['p_churn'] >= threshold, 'Yes', '')
+        st.write(f"{(data['contact'] == 'Yes').sum()} of {len(data)} "
+                 f"customers are above the threshold.")
+        st.dataframe(data.sort_values('p_churn', ascending=False).head(50))
+        st.download_button('Download scored CSV', data.to_csv(index=False),
+                           'scored_customers.csv', 'text/csv')
 
-    with result_col:
-        if prediction == 1:
-            st.error('⚠️ HIGH RISK: Customer likely to churn')
-            st.metric('Churn Probability', f'{churn_prob:.1f}%')
-        else:
-            st.success('✅ LOW RISK: Customer likely to stay')
-            st.metric('Retention Probability', f'{100 - churn_prob:.1f}%')
-
-        st.subheader('Recommendations')
-        recs = []
-        if prediction == 1:
-            if contract == 'Month-to-month':
-                recs.append('Offer an incentive to switch to a 1- or 2-year contract.')
-            if internet_service == 'Fiber optic':
-                recs.append('Review fiber pricing and service quality — fiber customers churn more.')
-            if payment_method == 'Electronic check':
-                recs.append('Encourage a switch to automatic payment (bank transfer or credit card).')
-            if tenure < 6:
-                recs.append('New customers are highest-risk — consider early-tenure outreach.')
-            if online_security == 'No':
-                recs.append('Bundle in online security — customers without it churn more often.')
-            if not recs:
-                recs.append('Flag account for proactive retention outreach.')
-        else:
-            recs.append('No action needed — customer profile indicates low churn risk.')
-
-        for r in recs:
-            st.write(f'- {r}')
-
-    with gauge_col:
-        fig = go.Figure(go.Indicator(
-            mode='gauge+number',
-            value=churn_prob,
-            number={'suffix': '%'},
-            title={'text': 'Churn risk'},
-            gauge={
-                'axis': {'range': [0, 100]},
-                'bar': {'color': 'darkred' if churn_prob >= 50 else 'darkgreen'},
-                'steps': [
-                    {'range': [0, 30], 'color': '#d4f7d4'},
-                    {'range': [30, 60], 'color': '#fff3cd'},
-                    {'range': [60, 100], 'color': '#f8d7da'}
-                ],
-                'threshold': {
-                    'line': {'color': 'black', 'width': 3},
-                    'thickness': 0.8,
-                    'value': churn_prob
-                }
-            }
-        ))
-        fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.info('Fill in the customer details above, then click "Predict Churn".')
+with tab3:
+    st.json({k: v for k, v in meta.items() if k != 'feature_columns'})
+    st.markdown('**Limitations:** trained on one US telecom dataset; '
+                'not validated for other markets. See the model card.')
